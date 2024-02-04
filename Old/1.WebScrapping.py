@@ -32,9 +32,9 @@ for ano in range(2004, datetime.datetime.now().year + 1):
     conexao = urllib3.PoolManager()  # Realizar a conexão
     retorno = conexao.request('GET', url)  # Acessar o respetivo link
     pagina = BeautifulSoup(retorno.data, 'html.parser')  # Obter um HTML da respetiva “WebPage”
+    print(pagina)
     tabela = pagina.find_all('table',
                              class_="tbl no-responsive ee hover no-back")  # Acessar a tabvela que possui os dados
-    type(tabela)
 
     # 1.2. Recolher os dados de cada uma das células
     dado = []
