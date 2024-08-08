@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 import urllib3
 from bs4 import BeautifulSoup
+import os
+from pathlib import Path
 
 
 def todas_tercas_e_sextas(desde_ano, ate_ano):
@@ -34,7 +36,7 @@ def todas_tercas_e_sextas(desde_ano, ate_ano):
 
 
 # Define os anos de início e fim
-desde_ano = 2004
+desde_ano = 2004  # colocar 2004
 ate_ano = datetime.now().year
 # ate_ano = 2024
 
@@ -55,7 +57,7 @@ colunasTabela = [
 
 euromilhoes = pd.DataFrame(columns=colunasTabela)  # Criação do DataFrame Final
 passos = 0
-print(f'-- {passos / len(datas) * 100}% --')
+print(f'### {round(passos / len(datas) * 100, 2)}% dos números recolhidos ### \n')
 
 for data in datas:
     url = f"https://www.euro-millions.com/results/{data}"  # Só muda os anos de cada um dos links
@@ -100,7 +102,14 @@ for data in datas:
     euromilhoes.reset_index(drop=True, inplace=True)  # Resetar o Índice do DataFrame
 
     passos += 1
-    print(f'{passos / len(datas) * 100}%')
+    print(f'-> {round(passos / len(datas) * 100, 2)}% dos números recolhidos \n')
 
 # 2. Guardar os dados num ficheiro csv
-euromilhoes.to_csv("euromilhoesTeste.csv", index=False)
+p = Path.cwd()
+p = p.parent.parent
+data_folder = p / "data" / "raw"
+nome_ficheiro = "euromilhoesTeste.csv"
+
+caminho_completo = os.path.join(data_folder, nome_ficheiro)
+os.makedirs(data_folder, exist_ok=True)
+euromilhoes.to_csv(caminho_completo, index=False)
