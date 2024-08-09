@@ -1,1 +1,17 @@
-# Lista de dependências do projeto
+numpy
+pandas
+scikit-learn
+matplotlib
+seaborn
+sympy
+scipy
+tensorflow
+torch
+nltk
+spacy
+dask
+openpyxl
+jsonschema
+jupyterlab
+IPython
+

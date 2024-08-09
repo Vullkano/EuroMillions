@@ -19,8 +19,8 @@ def criar_estrutura_projeto():
         f"src/features",
         f"src/models",
         f"src/visualization",
-        f"models",
-        f"reports/figures"
+        f"src/utils",
+        f"tests",
     ]
 
     for pasta in pastas:
