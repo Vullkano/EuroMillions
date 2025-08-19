@@ -14,4 +14,4 @@ openpyxl
 jsonschema
 jupyterlab
 IPython
-
+tqdm
