@@ -4,6 +4,7 @@ import seaborn as sns
 import numpy as np
 from pathlib import Path
 import os
+from scipy.stats import chi2_contingency
 
 # Configuração global do estilo para uniformizar todos os gráficos
 def configurar_estilo():
@@ -124,315 +125,447 @@ def plot_violinplot(df, titulo='Distribuição dos Números Principais - Violinp
 # GRÁFICOS DE EVOLUÇÃO TEMPORAL (LINE PLOT)
 # =============================================================================
 
-def plot_evolucao_tempo(df, coluna_data='Data', titulo='Evolução dos Valores ao Longo do Tempo', n_recentes=None):
-    """Line plot para evolução dos valores ao longo do tempo em um único gráfico"""
+def plot_lineplot(df, colunas, coluna_data='date', titulo='Evolução ao Longo do Tempo', n_recentes=None):
+    """Gera um line plot genérico.
+
+    Parâmetros:
+    - df: DataFrame com os dados
+    - colunas: nome da coluna (str) ou lista de colunas (list[str]) a representar no eixo Y
+    - coluna_data: nome da coluna de data/tempo
+    - titulo: título do gráfico
+    - n_recentes: opcional, usa apenas os n registos mais recentes
+    """
     # Configurar estilo
     configurar_estilo()
-    
-    fig, ax = plt.subplots(figsize=(16, 10))
-    
-    colunas_numeros = df.filter(like="N").columns
 
-    # Converter coluna de data se necessário
+    # Normalizar parâmetro de colunas
+    if isinstance(colunas, str):
+        colunas = [colunas]
+
+    # Validar colunas existentes
+    colunas_existentes = [c for c in colunas if c in df.columns]
+    if not colunas_existentes:
+        print("Nenhuma das colunas fornecidas existe no dataset.")
+        return None
+
+    fig, ax = plt.subplots(figsize=(16, 10))
+
+    # Preparar data/ordenação
     if coluna_data in df.columns:
         df_temp = df.copy()
-        df_temp[coluna_data] = pd.to_datetime(df_temp[coluna_data])
+        df_temp[coluna_data] = pd.to_datetime(df_temp[coluna_data], errors='coerce')
         df_temp = df_temp.sort_values(coluna_data)
     else:
-        # Se não houver coluna de data, usar o índice
         df_temp = df.copy()
         df_temp['indice'] = range(len(df_temp))
         coluna_data = 'indice'
-    
-    # Aplicar filtro para mostrar apenas os n valores mais recentes
+
+    # Aplicar filtro de mais recentes
     if n_recentes is not None and n_recentes < len(df_temp):
         df_temp = df_temp.tail(n_recentes)
-    
-    # Cores modernas e atrativas
-    cores = ['#2E86AB', '#A23B72', '#F18F01', '#C73E1D', '#3B1F2B']
-    
-    # Plotar cada número como uma linha separada no mesmo gráfico
-    for i, col in enumerate(colunas_numeros):
+
+    # Garantir colunas numéricas quando possível
+    for c in colunas_existentes:
+        df_temp[c] = pd.to_numeric(df_temp[c], errors='coerce')
+
+    # Cores
+    cores = ['#2E86AB', '#A23B72', '#F18F01', '#C73E1D', '#3B1F2B', '#7209B7', '#4361EE']
+
+    # Plot por coluna
+    for i, col in enumerate(colunas_existentes):
         cor = cores[i % len(cores)]
-        linha = ax.plot(df_temp[coluna_data], df_temp[col], 
-                       linewidth=3, marker='o', markersize=6, 
-                       label=col, color=cor, alpha=0.8)
-        
-        # Adicionar valores nos pontos
+        ax.plot(
+            df_temp[coluna_data],
+            df_temp[col],
+            linewidth=3,
+            marker='o',
+            markersize=6,
+            label=col,
+            color=cor,
+            alpha=0.9,
+        )
+
+        # Anotações nos pontos
         for x, y in zip(df_temp[coluna_data], df_temp[col]):
-            ax.annotate(f'{int(y)}', (x, y), 
-                       textcoords="offset points", 
-                       xytext=(0,10), 
-                       ha='center', 
-                       fontsize=9, 
-                       fontweight='bold',
-                       color=cor,
-                       bbox=dict(boxstyle="round,pad=0.3", 
-                                facecolor='white', 
-                                edgecolor=cor, 
-                                alpha=0.8))
-    
-    # Personalizar o gráfico
+            if pd.notna(y):
+                ax.annotate(
+                    f"{int(y)}",
+                    (x, y),
+                    textcoords="offset points",
+                    xytext=(0, 10),
+                    ha='center',
+                    fontsize=9,
+                    fontweight='bold',
+                    color=cor,
+                    bbox=dict(
+                        boxstyle="round,pad=0.3",
+                        facecolor='white',
+                        edgecolor=cor,
+                        alpha=0.85,
+                    ),
+                )
+
+    # Personalização
     ax.set_title(titulo, fontweight='bold', pad=20, color='#2c3e50')
     ax.set_xlabel('Tempo', fontweight='bold', color='#34495e')
     ax.set_ylabel('Valor', fontweight='bold', color='#34495e')
-    
-    # Grid mais elegante
+
     ax.grid(True, alpha=0.2, linestyle='--', linewidth=0.8)
     ax.set_facecolor('#f8f9fa')
-    
-    # Eixos mais limpos
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_color('#bdc3c7')
     ax.spines['bottom'].set_color('#bdc3c7')
-    
-    # Legend com design melhorado
-    legend = ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', 
-                      frameon=True, fancybox=True, shadow=True,
-                      title="Números", title_fontsize=13, fontsize=11)
+
+    legend = ax.legend(
+        bbox_to_anchor=(1.02, 1),
+        loc='upper left',
+        frameon=True,
+        fancybox=True,
+        shadow=True,
+        title="Séries",
+        title_fontsize=13,
+        fontsize=11,
+    )
     legend.get_frame().set_facecolor('white')
     legend.get_frame().set_edgecolor('#bdc3c7')
-    
+
     if coluna_data != 'indice':
         plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
-    
-    plt.tight_layout()
-    
 
-def plot_evolucao_premio_tempo(df, coluna_premio='Premio', coluna_data='Data', titulo='Evolução do Prémio ao Longo do Tempo'):
-    """Line plot para evolução do prémio ao longo do tempo"""
-    if coluna_premio not in df.columns:
-        print(f"Coluna '{coluna_premio}' não encontrada no dataset")
-        return None
-    
+    plt.tight_layout()
+
+
+# =============================================================================
+# GRÁFICOS DE DISTRIBUIÇÃO (HISTOGRAMA)
+# =============================================================================
+
+def plot_histogram(df, colunas, titulo='Histograma', bins=30, densidade=False, acumulado=False, mostrar_valores=True):
+    """Desenha histogramas para uma ou várias colunas numéricas.
+
+    Parâmetros:
+    - df: DataFrame com os dados
+    - colunas: nome da coluna (str) ou lista de colunas (list[str])
+    - titulo: título do gráfico
+    - bins: número de bins (int) ou sequência de arestas
+    - densidade: se True, normaliza para densidade (área=1)
+    - acumulado: se True, usa histograma acumulado
+    """
     # Configurar estilo
     configurar_estilo()
-    
+
+    if isinstance(colunas, str):
+        colunas = [colunas]
+
+    colunas_existentes = [c for c in colunas if c in df.columns]
+    if not colunas_existentes:
+        print("Nenhuma das colunas fornecidas existe no dataset.")
+        return None
+
     fig, ax = plt.subplots(figsize=(16, 10))
-    
-    # Converter coluna de data se necessário
-    if coluna_data in df.columns:
-        df_temp = df.copy()
-        df_temp[coluna_data] = pd.to_datetime(df_temp[coluna_data])
-        df_temp = df_temp.sort_values(coluna_data)
-    else:
-        df_temp = df.copy()
-        df_temp['indice'] = range(len(df_temp))
-        coluna_data = 'indice'
-    
-    # Converter prémio para numérico se necessário
-    df_temp[coluna_premio] = pd.to_numeric(df_temp[coluna_premio], errors='coerce')
-    
-    # Cor gradiente para o prémio
-    cor_principal = '#E74C3C'
-    cor_secundaria = '#C0392B'
-    
-    # Plotar linha principal
-    ax.plot(df_temp[coluna_data], df_temp[coluna_premio], 
-            linewidth=4, marker='o', markersize=8, 
-            color=cor_principal, alpha=0.9, 
-            markerfacecolor='white', markeredgecolor=cor_principal, markeredgewidth=2)
-    
-    # Adicionar valores nos pontos
-    for x, y in zip(df_temp[coluna_data], df_temp[coluna_premio]):
-        if pd.notna(y):
-            ax.annotate(f'€{int(y):,}', (x, y), 
-                       textcoords="offset points", 
-                       xytext=(0,15), 
-                       ha='center', 
-                       fontsize=10, 
-                       fontweight='bold',
-                       color=cor_principal,
-                       bbox=dict(boxstyle="round,pad=0.4", 
-                                facecolor='white', 
-                                edgecolor=cor_principal, 
-                                alpha=0.9))
-    
-    # Personalizar o gráfico
-    ax.set_title(titulo, fontweight='bold', pad=20, color='#2c3e50', fontsize=20)
-    ax.set_xlabel('Tempo', fontweight='bold', color='#34495e', fontsize=14)
-    ax.set_ylabel('Prémio (€)', fontweight='bold', color='#34495e', fontsize=14)
-    
-    # Grid mais elegante
+
+    cores = ['#2E86AB', '#A23B72', '#F18F01', '#C73E1D', '#3B1F2B', '#7209B7', '#4361EE']
+
+    for i, col in enumerate(colunas_existentes):
+        cor = cores[i % len(cores)]
+        serie = pd.to_numeric(df[col], errors='coerce').dropna()
+        n, b, patches = ax.hist(
+            serie,
+            bins=bins,
+            alpha=0.7,
+            color=cor,
+            edgecolor='white',
+            linewidth=1.2,
+            density=densidade,
+            cumulative=acumulado,
+            label=col,
+        )
+
+        # Adicionar valores no topo de cada barra
+        if mostrar_valores:
+            for rect, v in zip(patches, n):
+                if not np.isfinite(v) or v == 0:
+                    continue
+                altura = rect.get_height()
+                ax.text(
+                    rect.get_x() + rect.get_width()/2.0,
+                    altura,
+                    f"{v:.2f}" if densidade else f"{int(v)}",
+                    ha='center',
+                    va='bottom',
+                    fontsize=9,
+                    fontweight='bold',
+                    color='#2c3e50',
+                    bbox=dict(
+                        boxstyle="round,pad=0.25",
+                        facecolor='white',
+                        edgecolor=cor,
+                        alpha=0.85,
+                    ),
+                )
+
+    ax.set_title(titulo, fontweight='bold', pad=20, color='#2c3e50')
+    ax.set_xlabel('Valor', fontweight='bold', color='#34495e')
+    ax.set_ylabel('Densidade' if densidade else 'Frequência', fontweight='bold', color='#34495e')
+
     ax.grid(True, alpha=0.2, linestyle='--', linewidth=0.8)
     ax.set_facecolor('#f8f9fa')
-    
-    # Eixos mais limpos
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_color('#bdc3c7')
     ax.spines['bottom'].set_color('#bdc3c7')
-    
-    # Formatar eixo Y para valores monetários
-    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'€{int(x):,}'))
-    
-    if coluna_data != 'indice':
-        plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
-    
+
+    legend = ax.legend(frameon=True, fancybox=True, shadow=True, title="Variáveis", title_fontsize=13, fontsize=11)
+    legend.get_frame().set_facecolor('white')
+    legend.get_frame().set_edgecolor('#bdc3c7')
+
     plt.tight_layout()
-    
 
 # =============================================================================
 # GRÁFICOS DE FREQUÊNCIA (BARPLOT)
 # =============================================================================
 
-def plot_frequencia_numeros(df, top_n=20, titulo=None):
-    """Barplot com os números que mais saíram"""
-    if titulo is None:
-        titulo = f'Top {top_n} Números Mais Frequentes'
-    
-    # Configurar estilo
-    configurar_estilo()
-    
-    fig, ax = plt.subplots(figsize=(16, 10))
-    
-    colunas_numeros = [col for col in df.columns if 'Numero' in col or col.isdigit()][:5]
-    if not colunas_numeros:
-        colunas_numeros = df.columns[:5]
-    
-    # Contar frequência de cada número
-    todos_numeros = []
-    for col in colunas_numeros:
-        todos_numeros.extend(df[col].dropna().tolist())
-    
-    # Contar frequências
-    from collections import Counter
-    freq_numeros = Counter(todos_numeros)
-    
-    # Pegar os top N mais frequentes
-    top_freq = dict(sorted(freq_numeros.items(), key=lambda x: x[1], reverse=True)[:top_n])
-    
-    # Cores modernas e gradientes
-    cores = plt.cm.viridis(np.linspace(0, 1, len(top_freq)))
-    
-    # Criar o gráfico com barras mais elegantes
-    bars = ax.bar(range(len(top_freq)), list(top_freq.values()), 
-                   color=cores, alpha=0.8, edgecolor='white', linewidth=1.5)
-    
-    # Personalizar o gráfico
-    ax.set_xlabel('Números', fontweight='bold', color='#34495e', fontsize=14)
-    ax.set_ylabel('Frequência', fontweight='bold', color='#34495e', fontsize=14)
-    ax.set_title(titulo, fontweight='bold', pad=20, color='#2c3e50', fontsize=20)
-    ax.set_xticks(range(len(top_freq)))
-    ax.set_xticklabels(list(top_freq.keys()))
-    
-    # Grid mais elegante
-    ax.grid(True, alpha=0.2, axis='y', linestyle='--', linewidth=0.8)
-    ax.set_facecolor('#f8f9fa')
-    
-    # Eixos mais limpos
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_color('#bdc3c7')
-    ax.spines['bottom'].set_color('#bdc3c7')
-    
-    # Adicionar valores nas barras com design melhorado
-    for i, (bar, v) in enumerate(zip(bars, top_freq.values())):
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2., height + 0.5, 
-               str(v), ha='center', va='bottom', 
-               fontsize=11, fontweight='bold', color='#2c3e50',
-               bbox=dict(boxstyle="round,pad=0.3", 
-                        facecolor='white', 
-                        edgecolor=cores[i], 
-                        alpha=0.8))
-    
-    plt.xticks(rotation=45, ha='right')
-    plt.tight_layout()
-    
+def plot_barplot(df, colunas, top_n=20, orientacao='vertical', titulo=None):
+    """Barplot empilhado das frequências dos valores nas colunas fornecidas.
 
-def plot_frequencia_estrelas(df, top_n=12, titulo=None):
-    """Barplot com as estrelas que mais saíram"""
-    if titulo is None:
-        titulo = f'Top {top_n} Estrelas Mais Frequentes'
-    
+    Parâmetros:
+    - df: DataFrame com os dados
+    - colunas: nome da coluna (str) ou lista de colunas (list[str]) a considerar
+    - top_n: quantos valores mais frequentes mostrar (com base no total agregado)
+    - orientacao: 'vertical' ou 'horizontal'
+    - titulo: título do gráfico (opcional)
+    """
     # Configurar estilo
     configurar_estilo()
-    
+
+    # Normalizar colunas
+    if isinstance(colunas, str):
+        colunas = [colunas]
+    colunas_existentes = [c for c in colunas if c in df.columns]
+    if not colunas_existentes:
+        print("Nenhuma das colunas fornecidas existe no dataset.")
+        return None
+
+    # Frequências por coluna
+    contagens_por_coluna = {}
+    indice_total = set()
+    for c in colunas_existentes:
+        serie = pd.to_numeric(df[c], errors='ignore')
+        contagens = serie.dropna().value_counts()
+        contagens_por_coluna[c] = contagens
+        indice_total.update(contagens.index.tolist())
+
+    # Total agregado por categoria
+    indice_total = list(indice_total)
+    total_por_categoria = pd.Series(0, index=indice_total, dtype=float)
+    for c in colunas_existentes:
+        total_por_categoria = total_por_categoria.add(contagens_por_coluna[c].reindex(indice_total, fill_value=0), fill_value=0)
+
+    # Top N categorias
+    top_categorias = total_por_categoria.sort_values(ascending=False).head(top_n)
+    categorias_ordenadas = top_categorias.index.tolist()
+
+    # Matriz empilhada (linhas=categorias, colunas=colunas)
+    dados_empilhados = pd.DataFrame(0, index=categorias_ordenadas, columns=colunas_existentes, dtype=float)
+    for c in colunas_existentes:
+        dados_empilhados[c] = contagens_por_coluna[c].reindex(categorias_ordenadas, fill_value=0)
+
+    # Preparar figura
     fig, ax = plt.subplots(figsize=(16, 10))
-    
-    colunas_estrelas = [col for col in df.columns if 'Estrela' in col or 'Star' in col][:2]
-    if not colunas_estrelas:
-        colunas_estrelas = df.columns[5:7] if len(df.columns) >= 7 else df.columns[-2:]
-    
-    # Contar frequência de cada estrela
-    todas_estrelas = []
-    for col in colunas_estrelas:
-        todas_estrelas.extend(df[col].dropna().tolist())
-    
-    # Contar frequências
-    from collections import Counter
-    freq_estrelas = Counter(todas_estrelas)
-    
-    # Pegar as top N mais frequentes
-    top_freq = dict(sorted(freq_estrelas.items(), key=lambda x: x[1], reverse=True)[:top_n])
-    
-    # Cores modernas e gradientes para estrelas
-    cores = plt.cm.plasma(np.linspace(0, 1, len(top_freq)))
-    
-    # Criar o gráfico com barras mais elegantes
-    bars = ax.bar(range(len(top_freq)), list(top_freq.values()), 
-                   color=cores, alpha=0.8, edgecolor='white', linewidth=1.5)
-    
-    # Personalizar o gráfico
-    ax.set_xlabel('Estrelas', fontweight='bold', color='#34495e', fontsize=14)
-    ax.set_ylabel('Frequência', fontweight='bold', color='#34495e', fontsize=14)
+
+    cores = ['#2E86AB', '#A23B72', '#F18F01', '#C73E1D', '#3B1F2B', '#7209B7', '#4361EE', '#3A0CA3']
+
+    # Plot empilhado
+    if str(orientacao).lower().startswith('h'):
+        acumulado = np.zeros(len(categorias_ordenadas))
+        for i, c in enumerate(colunas_existentes):
+            valores = dados_empilhados[c].values
+            ax.barh(
+                y=np.arange(len(categorias_ordenadas)),
+                width=valores,
+                left=acumulado,
+                color=cores[i % len(cores)],
+                edgecolor='white',
+                linewidth=1.2,
+                alpha=0.9,
+                label=c,
+            )
+            acumulado += valores
+
+        ax.set_yticks(np.arange(len(categorias_ordenadas)))
+        ax.set_yticklabels(categorias_ordenadas)
+        ax.set_xlabel('Frequência', fontweight='bold', color='#34495e')
+        ax.set_ylabel('Valores', fontweight='bold', color='#34495e')
+
+        # Ordenação visual decrescente (maior no topo)
+        ax.invert_yaxis()
+
+        # Etiquetas com totais no fim de cada barra
+        desvio = 0.01 * (acumulado.max() if acumulado.max() > 0 else 1)
+        for yi, total in enumerate(acumulado):
+            if total > 0:
+                ax.text(
+                    total + desvio,
+                    yi,
+                    f"{int(total)}",
+                    va='center',
+                    ha='left',
+                    fontsize=10,
+                    fontweight='bold',
+                    color='#2c3e50',
+                    bbox=dict(boxstyle="round,pad=0.25", facecolor='white', edgecolor='#bdc3c7', alpha=0.85),
+                )
+    else:
+        acumulado = np.zeros(len(categorias_ordenadas))
+        x = np.arange(len(categorias_ordenadas))
+        for i, c in enumerate(colunas_existentes):
+            valores = dados_empilhados[c].values
+            ax.bar(
+                x=x,
+                height=valores,
+                bottom=acumulado,
+                color=cores[i % len(cores)],
+                edgecolor='white',
+                linewidth=1.2,
+                alpha=0.9,
+                label=c,
+            )
+            acumulado += valores
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(categorias_ordenadas, rotation=45, ha='right')
+        ax.set_xlabel('Valores', fontweight='bold', color='#34495e')
+        ax.set_ylabel('Frequência', fontweight='bold', color='#34495e')
+
+        # Etiquetas com totais no topo de cada barra
+        desvio = 0.01 * (acumulado.max() if acumulado.max() > 0 else 1)
+        for xi, total in enumerate(acumulado):
+            if total > 0:
+                ax.text(
+                    xi,
+                    total + desvio,
+                    f"{int(total)}",
+                    va='bottom',
+                    ha='center',
+                    fontsize=10,
+                    fontweight='bold',
+                    color='#2c3e50',
+                    bbox=dict(boxstyle="round,pad=0.25", facecolor='white', edgecolor='#bdc3c7', alpha=0.85),
+                )
+
+    # Título e estilo
+    if titulo is None:
+        titulo = f"Top {top_n} Valores Mais Frequentes (Empilhado)"
     ax.set_title(titulo, fontweight='bold', pad=20, color='#2c3e50', fontsize=20)
-    ax.set_xticks(range(len(top_freq)))
-    ax.set_xticklabels(list(top_freq.keys()))
-    
-    # Grid mais elegante
-    ax.grid(True, alpha=0.2, axis='y', linestyle='--', linewidth=0.8)
+
+    grelha_eixo = 'x' if str(orientacao).lower().startswith('h') else 'y'
+    ax.grid(True, alpha=0.2, axis=grelha_eixo, linestyle='--', linewidth=0.8)
     ax.set_facecolor('#f8f9fa')
-    
-    # Eixos mais limpos
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_color('#bdc3c7')
     ax.spines['bottom'].set_color('#bdc3c7')
-    
-    # Adicionar valores nas barras com design melhorado
-    for i, (bar, v) in enumerate(zip(bars, top_freq.values())):
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2., height + 0.1, 
-               str(v), ha='center', va='bottom', 
-               fontsize=11, fontweight='bold', color='#2c3e50',
-               bbox=dict(boxstyle="round,pad=0.3", 
-                        facecolor='white', 
-                        edgecolor=cores[i], 
-                        alpha=0.8))
-    
-    plt.xticks(rotation=45, ha='right')
+
+    legend = ax.legend(frameon=True, fancybox=True, shadow=True, title="Colunas", title_fontsize=13, fontsize=11)
+    legend.get_frame().set_facecolor('white')
+    legend.get_frame().set_edgecolor('#bdc3c7')
+
     plt.tight_layout()
-    
 
 # =============================================================================
 # GRÁFICOS DE DISTRIBUIÇÃO (PIEPLOT)
 # =============================================================================
 
-def plot_distribuicao_vencedores(df, coluna_vencedor='Vencedor', titulo='Distribuição de Vencedores do Primeiro Prémio'):
-    """Pieplot com a distribuição se houve vencedor do primeiro prémio"""
-    if coluna_vencedor not in df.columns:
-        print(f"Coluna '{coluna_vencedor}' não encontrada no dataset")
-        return None
+def plot_pieplot(df, colunas, top_n=5, titulo='Distribuição', tipo='contagem', colormap='viridis'):
+    """Pieplot genérico com opções de contagem, soma ou faixas.
     
+    Parâmetros:
+    - df: DataFrame com os dados
+    - colunas: nome da coluna (str) ou lista de colunas (list[str])
+    - top_n: máximo de categorias a mostrar (resto vai para "Outros")
+    - titulo: título do gráfico
+    - tipo: 'contagem' (value_counts), 'soma' (soma das colunas), 'faixas' (faixas da soma)
+    - colormap: nome do colormap ('viridis', 'plasma', 'Set3', 'tab10', 'hsv', etc.)
+    """
     # Configurar estilo
     configurar_estilo()
     
+    # Normalizar colunas
+    if isinstance(colunas, str):
+        colunas = [colunas]
+    colunas_existentes = [c for c in colunas if c in df.columns]
+    if not colunas_existentes:
+        print("Nenhuma das colunas fornecidas existe no dataset.")
+        return None
+    
     fig, ax = plt.subplots(figsize=(12, 10))
     
-    # Contar valores únicos
-    contagem = df[coluna_vencedor].value_counts()
+    # Preparar dados conforme o tipo
+    if tipo == 'contagem':
+        # Contagem simples de valores únicos
+        todos_valores = []
+        for col in colunas_existentes:
+            todos_valores.extend(df[col].dropna().tolist())
+        contagem = pd.Series(todos_valores).value_counts()
+        
+    elif tipo == 'soma':
+        # Soma das colunas
+        df_temp = df.copy()
+        df_temp['Soma'] = df_temp[colunas_existentes].sum(axis=1)
+        contagem = df_temp['Soma'].value_counts().sort_index()
+        
+    elif tipo == 'faixas':
+        # Faixas da soma das colunas
+        df_temp = df.copy()
+        df_temp['Soma'] = df_temp[colunas_existentes].sum(axis=1)
+        
+        # Criar faixas automáticas baseadas nos dados
+        min_val, max_val = df_temp['Soma'].min(), df_temp['Soma'].max()
+        if pd.isna(min_val) or pd.isna(max_val):
+            print("Não foi possível calcular faixas com os dados fornecidos.")
+            return None
+            
+        # Criar 5 faixas aproximadamente iguais
+        faixas = pd.cut(df_temp['Soma'], bins=5, include_lowest=True)
+        contagem = faixas.value_counts().sort_index()
+        
+    else:
+        print(f"Tipo '{tipo}' não reconhecido. Use 'contagem', 'soma' ou 'faixas'.")
+        return None
     
-    # Cores modernas e atrativas
-    colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c']
+    # Limitar a top_n categorias e agrupar o resto em "Outros"
+    if len(contagem) > top_n:
+        top_categorias = contagem.head(top_n)
+        outros_valor = contagem.iloc[top_n:].sum()
+        
+        # Criar nova série com "Outros"
+        contagem_final = pd.concat([
+            top_categorias,
+            pd.Series([outros_valor], index=['Outros'])
+        ])
+    else:
+        contagem_final = contagem
+    
+    # Usar colormap em vez de cores fixas
+    try:
+        cmap = plt.cm.get_cmap(colormap)
+        cores = [cmap(i) for i in np.linspace(0, 1, len(contagem_final))]
+    except:
+        # Fallback para cores padrão se o colormap não existir
+        print(f"Colormap '{colormap}' não encontrado. Usando cores padrão.")
+        cores = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#34495e']
     
     # Criar o pieplot com design melhorado
-    wedges, texts, autotexts = ax.pie(contagem.values, labels=contagem.index, 
-                                       autopct='%1.1f%%', colors=colors[:len(contagem)],
-                                       startangle=90, shadow=True, explode=[0.05]*len(contagem),
-                                       textprops={'fontsize': 11, 'fontweight': 'bold'})
+    wedges, texts, autotexts = ax.pie(
+        contagem_final.values, 
+        labels=contagem_final.index, 
+        autopct='%1.1f%%', 
+        colors=cores,
+        startangle=90, 
+        shadow=True, 
+        explode=[0.05]*len(contagem_final),
+        textprops={'fontsize': 11, 'fontweight': 'bold'}
+    )
     
     # Personalizar o título
     ax.set_title(titulo, fontweight='bold', pad=20, color='#2c3e50', fontsize=20)
@@ -444,274 +577,293 @@ def plot_distribuicao_vencedores(df, coluna_vencedor='Vencedor', titulo='Distrib
         autotext.set_fontsize(12)
     
     # Adicionar legenda com design melhorado
-    legend = ax.legend(wedges, contagem.index, title="Status", 
-                      loc="center left", bbox_to_anchor=(1, 0, 0.5, 1),
-                      title_fontsize=13, fontsize=11)
+    legend = ax.legend(
+        wedges, 
+        [f"{idx} ({val})" for idx, val in contagem_final.items()], 
+        title="Categorias", 
+        loc="center left", 
+        bbox_to_anchor=(1, 0, 0.5, 1),
+        title_fontsize=13, 
+        fontsize=11
+    )
     legend.get_frame().set_facecolor('white')
     legend.get_frame().set_edgecolor('#bdc3c7')
     
     plt.tight_layout()
-    
-
-def plot_distribuicao_soma_numeros(df, titulo='Distribuição da Soma dos Números por Faixas'):
-    """Pieplot com a distribuição da soma dos números por faixas"""
-    # Configurar estilo
-    configurar_estilo()
-    
-    fig, ax = plt.subplots(figsize=(12, 10))
-    
-    colunas_numeros = [col for col in df.columns if 'Numero' in col or col.isdigit()][:5]
-    if not colunas_numeros:
-        colunas_numeros = df.columns[:5]
-    
-    # Calcular soma dos números
-    df_temp = df.copy()
-    df_temp['SomaNumeros'] = df_temp[colunas_numeros].sum(axis=1)
-    
-    # Criar faixas
-    faixas = ['0-50', '51-100', '101-150', '151-200', '201+']
-    limites = [0, 50, 100, 150, 200, float('inf')]
-    
-    df_temp['Faixa'] = pd.cut(df_temp['SomaNumeros'], bins=limites, labels=faixas, right=False)
-    contagem_faixas = df_temp['Faixa'].value_counts()
-    
-    # Cores modernas e atrativas
-    colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6']
-    
-    # Criar o pieplot com design melhorado
-    wedges, texts, autotexts = ax.pie(contagem_faixas.values, labels=contagem_faixas.index, 
-                                       autopct='%1.1f%%', colors=colors[:len(contagem_faixas)],
-                                       startangle=90, shadow=True, explode=[0.05]*len(contagem_faixas),
-                                       textprops={'fontsize': 11, 'fontweight': 'bold'})
-    
-    # Personalizar o título
-    ax.set_title(titulo, fontweight='bold', pad=20, color='#2c3e50', fontsize=20)
-    
-    # Personalizar as percentagens
-    for autotext in autotexts:
-        autotext.set_color('white')
-        autotext.set_fontweight('bold')
-        autotext.set_fontsize(12)
-    
-    plt.tight_layout()
-    
-
-def plot_distribuicao_soma_estrelas(df, titulo='Distribuição da Soma das Estrelas'):
-    """Pieplot com a distribuição da soma das estrelas"""
-    # Configurar estilo
-    configurar_estilo()
-    
-    fig, ax = plt.subplots(figsize=(12, 10))
-    
-    colunas_estrelas = [col for col in df.columns if 'Estrela' in col or 'Star' in col][:2]
-    if not colunas_estrelas:
-        colunas_estrelas = df.columns[5:7] if len(df.columns) >= 7 else df.columns[-2:]
-    
-    # Calcular soma das estrelas
-    df_temp = df.copy()
-    df_temp['SomaEstrelas'] = df_temp[colunas_estrelas].sum(axis=1)
-    
-    # Contar valores únicos
-    contagem = df_temp['SomaEstrelas'].value_counts().sort_index()
-    
-    # Cores modernas e atrativas para estrelas
-    colors = ['#f39c12', '#e67e22', '#d35400', '#e74c3c', '#c0392b', '#a93226']
-    
-    # Criar o pieplot com design melhorado
-    wedges, texts, autotexts = ax.pie(contagem.values, labels=contagem.index, 
-                                       autopct='%1.1f%%', colors=colors[:len(contagem)],
-                                       startangle=90, shadow=True, explode=[0.05]*len(contagem),
-                                       textprops={'fontsize': 11, 'fontweight': 'bold'})
-    
-    # Personalizar o título
-    ax.set_title(titulo, fontweight='bold', pad=20, color='#2c3e50', fontsize=20)
-    
-    # Personalizar as percentagens
-    for autotext in autotexts:
-        autotext.set_color('white')
-        autotext.set_fontweight('bold')
-        autotext.set_fontsize(12)
-    
-    plt.tight_layout()
-    
 
 # =============================================================================
 # GRÁFICOS ADICIONAIS INTERESSANTES
 # =============================================================================
 
-def plot_heatmap_correlacao(df, titulo='Matriz de Correlação entre Números e Estrelas'):
-    """Heatmap de correlação entre números e estrelas"""
+def plot_pearson_correlation(df, titulo='Correlação de Pearson'):
+    """Heatmap de correlação de Pearson para variáveis numéricas
+    
+    Parâmetros:
+    - df: DataFrame com os dados
+    - titulo: título do gráfico
+    """
     # Configurar estilo
     configurar_estilo()
     
-    fig, ax = plt.subplots(figsize=(14, 12))
-     
     # Selecionar colunas numéricas
     colunas_numericas = df.select_dtypes(include=[np.number]).columns
-     
+    
     if len(colunas_numericas) < 2:
-        print("Não há colunas numéricas suficientes para criar o heatmap")
+        print("Não há colunas numéricas suficientes para criar o heatmap de Pearson")
         return None
-     
-    # Calcular correlação
-    correlacao = df[colunas_numericas].corr()
-     
-    # Criar heatmap mais elegante
-    im = ax.imshow(correlacao, cmap='RdBu_r', center=0, aspect='auto', 
+    
+    fig, ax = plt.subplots(figsize=(14, 12))
+    
+    # Preparar dados para Pearson
+    df_pearson = df[colunas_numericas].copy()
+    # Converter colunas object para numérico se possível
+    for col in df_pearson.columns:
+        if df_pearson[col].dtype == "O":
+            df_pearson[col] = df_pearson[col].factorize(sort=True)[0]
+    
+    correlacao_pearson = df_pearson.corr(method="pearson")
+    
+    # Criar heatmap
+    im = ax.imshow(correlacao_pearson, cmap='RdBu_r', aspect='auto', 
                    vmin=-1, vmax=1, alpha=0.8)
     
     # Adicionar valores de correlação
-    for i in range(len(correlacao.columns)):
-        for j in range(len(correlacao.columns)):
-            valor = correlacao.iloc[i, j]
-            cor_texto = 'white' if abs(valor) > 0.5 else 'black'
-            ax.text(j, i, f'{valor:.2f}', ha='center', va='center', 
-                   fontsize=10, fontweight='bold', color=cor_texto)
+    for i in range(len(correlacao_pearson.columns)):
+        for j in range(len(correlacao_pearson.columns)):
+            valor = correlacao_pearson.iloc[i, j]
+            if pd.notna(valor):
+                cor_texto = 'white' if abs(valor) > 0.5 else 'black'
+                ax.text(j, i, f'{valor:.2f}', ha='center', va='center', 
+                       fontsize=9, fontweight='bold', color=cor_texto)
     
     # Personalizar eixos
-    ax.set_xticks(range(len(correlacao.columns)))
-    ax.set_yticks(range(len(correlacao.columns)))
-    ax.set_xticklabels(correlacao.columns, rotation=45, ha='right')
-    ax.set_yticklabels(correlacao.columns)
+    ax.set_xticks(range(len(correlacao_pearson.columns)))
+    ax.set_yticks(range(len(correlacao_pearson.columns)))
+    ax.set_xticklabels(correlacao_pearson.columns, rotation=45, ha='right')
+    ax.set_yticklabels(correlacao_pearson.columns)
     
-    # Personalizar o gráfico
+    # Título
     ax.set_title(titulo, fontweight='bold', pad=20, color='#2c3e50', fontsize=20)
     
-    # Adicionar barra de cores
+    # Barra de cores
     cbar = plt.colorbar(im, ax=ax, shrink=0.8)
-    cbar.set_label('Correlação', fontweight='bold', color='#34495e', fontsize=12)
+    cbar.set_label('Correlação de Pearson', fontweight='bold', color='#34495e', fontsize=12)
     
-    # Grid mais elegante
+    # Estilo
     ax.grid(False)
     ax.set_facecolor('#f8f9fa')
-    
-    # Eixos mais limpos
     for spine in ax.spines.values():
         spine.set_color('#bdc3c7')
         spine.set_linewidth(0.5)
     
     plt.tight_layout()
-    
 
-def plot_distribuicao_combinada(df, titulo='Distribuição Combinada de Números e Estrelas'):
-    """Histograma combinado da distribuição de números e estrelas"""
+
+def plot_cramer_correlation(df, titulo='V de Cramér'):
+    """Heatmap de V de Cramér para variáveis categóricas
+    
+    Parâmetros:
+    - df: DataFrame com os dados
+    - titulo: título do gráfico
+    """
     # Configurar estilo
     configurar_estilo()
     
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 8))
-     
-    colunas_numeros = [col for col in df.columns if 'Numero' in col or col.isdigit()][:5]
-    colunas_estrelas = [col for col in df.columns if 'Estrela' in col or 'Star' in col][:2]
-     
-    if not colunas_numeros:
-        colunas_numeros = df.columns[:5]
-    if not colunas_estrelas:
-        colunas_estrelas = df.columns[5:7] if len(df.columns) >= 7 else df.columns[-2:]
-     
-    # Distribuição dos números
-    todos_numeros = []
-    for col in colunas_numeros:
-        todos_numeros.extend(df[col].dropna().tolist())
-     
-    # Histograma dos números com design melhorado
-    n1, bins1, patches1 = ax1.hist(todos_numeros, bins=50, alpha=0.8, 
-                                   color='#3498db', edgecolor='#2980b9', linewidth=1.5)
-    ax1.set_title('Distribuição dos Números', fontweight='bold', color='#2c3e50', fontsize=16)
-    ax1.set_xlabel('Valores', fontweight='bold', color='#34495e', fontsize=12)
-    ax1.set_ylabel('Frequência', fontweight='bold', color='#34495e', fontsize=12)
-    ax1.grid(True, alpha=0.2, linestyle='--', linewidth=0.8)
-    ax1.set_facecolor('#f8f9fa')
+    # Selecionar colunas categóricas
+    colunas_categoricas = df.select_dtypes(include=['object', 'category', 'int64']).columns
     
-    # Eixos mais limpos para ax1
-    ax1.spines['top'].set_visible(False)
-    ax1.spines['right'].set_visible(False)
-    ax1.spines['left'].set_color('#bdc3c7')
-    ax1.spines['bottom'].set_color('#bdc3c7')
-     
-    # Distribuição das estrelas
-    todas_estrelas = []
-    for col in colunas_estrelas:
-        todas_estrelas.extend(df[col].dropna().tolist())
-     
-    # Histograma das estrelas com design melhorado
-    n2, bins2, patches2 = ax2.hist(todas_estrelas, bins=20, alpha=0.8, 
-                                   color='#e74c3c', edgecolor='#c0392b', linewidth=1.5)
-    ax2.set_title('Distribuição das Estrelas', fontweight='bold', color='#2c3e50', fontsize=16)
-    ax2.set_xlabel('Valores', fontweight='bold', color='#34495e', fontsize=12)
-    ax2.set_ylabel('Frequência', fontweight='bold', color='#34495e', fontsize=12)
-    ax2.grid(True, alpha=0.2, linestyle='--', linewidth=0.8)
-    ax2.set_facecolor('#f8f9fa')
+    if len(colunas_categoricas) < 2:
+        print("Não há colunas categóricas suficientes para criar o heatmap de V de Cramér")
+        return None
     
-    # Eixos mais limpos para ax2
-    ax2.spines['top'].set_visible(False)
-    ax2.spines['right'].set_visible(False)
-    ax2.spines['left'].set_color('#bdc3c7')
-    ax2.spines['bottom'].set_color('#bdc3c7')
-     
-    plt.suptitle(titulo, fontsize=20, fontweight='bold', color='#2c3e50', y=0.98)
+    fig, ax = plt.subplots(figsize=(14, 12))
+    
+    # Função para calcular V de Cramér (implementação completa)
+    def cramers_v(x, y):
+        """Calcula o V de Cramér entre duas variáveis categóricas"""
+        try:
+            # Criar tabela de contingência
+            confusion_matrix = pd.crosstab(x, y)
+            
+            # Verificar se a tabela tem dados válidos
+            if confusion_matrix.empty or confusion_matrix.sum().sum() == 0:
+                return 0.0
+            
+            # Teste chi-quadrado
+            chi2 = chi2_contingency(confusion_matrix)[0]
+            n = confusion_matrix.sum().sum()
+            
+            # Calcular phi²
+            phi2 = chi2 / n
+            
+            # Obter dimensões da tabela
+            r, k = confusion_matrix.shape
+            
+            # Correção de bias para phi²
+            phi2corr = max(0, phi2 - ((k - 1) * (r - 1)) / (n - 1))
+            
+            # Correção de bias para as dimensões
+            rcorr = r - ((r - 1) ** 2) / (n - 1)
+            kcorr = k - ((k - 1) ** 2) / (n - 1)
+            
+            # Calcular V de Cramér corrigido
+            if min((kcorr - 1), (rcorr - 1)) <= 0:
+                return 0.0
+            cramer_v = np.sqrt(phi2corr / min((kcorr - 1), (rcorr - 1)))
+            
+            # Garantir que o resultado seja um número válido
+            if np.isnan(cramer_v) or np.isinf(cramer_v):
+                return 0.0
+                
+            return float(cramer_v)
+        except Exception as e:
+            # Em caso de erro, retornar 0.0
+            return 0.0
+    
+    # Preparar dados para V de Cramér
+    df_cramer = df[colunas_categoricas].copy()
+    
+    # Converter colunas categóricas para o tipo 'category'
+    for col in df_cramer.columns:
+        df_cramer[col] = df_cramer[col].astype('category')
+    
+    # Calcular matriz de V de Cramér
+    correlacao_cramer = pd.DataFrame(index=colunas_categoricas, columns=colunas_categoricas)
+    
+    for col1 in colunas_categoricas:
+        for col2 in colunas_categoricas:
+            if col1 == col2:
+                correlacao_cramer.loc[col1, col2] = 1.0
+            else:
+                correlacao_cramer.loc[col1, col2] = cramers_v(df_cramer[col1], df_cramer[col2])
+    
+    # Remover colunas com valores ausentes
+    correlacao_cramer = correlacao_cramer.dropna(axis=1, how='any')
+    correlacao_cramer = correlacao_cramer.dropna(axis=0, how='any')
+    
+    if correlacao_cramer.empty:
+        print("Não foi possível calcular V de Cramér com os dados fornecidos")
+        return None
+    
+    # Garantir que todos os valores sejam numéricos
+    correlacao_cramer = correlacao_cramer.astype(float)
+    
+    # Verificar se ainda há valores não numéricos
+    if not correlacao_cramer.select_dtypes(include=[np.number]).columns.equals(correlacao_cramer.columns):
+        print("Erro: Ainda há valores não numéricos na matriz de correlação")
+        return None
+    
+    # Criar heatmap
+    im = ax.imshow(correlacao_cramer, cmap='viridis', aspect='auto', 
+                   vmin=0, vmax=1, alpha=0.8)
+    
+    # Adicionar valores de V de Cramér
+    for i in range(len(correlacao_cramer.columns)):
+        for j in range(len(correlacao_cramer.columns)):
+            valor = correlacao_cramer.iloc[i, j]
+            if pd.notna(valor):
+                cor_texto = 'white' if valor > 0.5 else 'black'
+                ax.text(j, i, f'{valor:.2f}', ha='center', va='center', 
+                       fontsize=9, fontweight='bold', color=cor_texto)
+    
+    # Personalizar eixos
+    ax.set_xticks(range(len(correlacao_cramer.columns)))
+    ax.set_yticks(range(len(correlacao_cramer.columns)))
+    ax.set_xticklabels(correlacao_cramer.columns, rotation=45, ha='right')
+    ax.set_yticklabels(correlacao_cramer.columns)
+    
+    # Título
+    ax.set_title(titulo, fontweight='bold', pad=20, color='#2c3e50', fontsize=20)
+    
+    # Barra de cores
+    cbar = plt.colorbar(im, ax=ax, shrink=0.8)
+    cbar.set_label('V de Cramér', fontweight='bold', color='#34495e', fontsize=12)
+    
+    # Estilo
+    ax.grid(False)
+    ax.set_facecolor('#f8f9fa')
+    for spine in ax.spines.values():
+        spine.set_color('#bdc3c7')
+        spine.set_linewidth(0.5)
+    
     plt.tight_layout()
-    
 
-def plot_estatisticas_resumo(df, titulo='Estatísticas Resumo: Números vs Estrelas'):
-    """Gráfico de barras com estatísticas resumo dos dados"""
+def plot_estatisticas_resumo(df, colunas, titulo='Estatísticas Resumo das Colunas'):
+    """Gráfico de barras com estatísticas resumo das colunas especificadas
+    
+    Parâmetros:
+    - df: DataFrame com os dados
+    - colunas: nome da coluna (str) ou lista de colunas (list[str]) a analisar
+    - titulo: título do gráfico
+    """
     # Configurar estilo
     configurar_estilo()
+    
+    # Normalizar colunas
+    if isinstance(colunas, str):
+        colunas = [colunas]
+    
+    colunas_existentes = [c for c in colunas if c in df.columns]
+    if not colunas_existentes:
+        print("Nenhuma das colunas fornecidas existe no dataset.")
+        return None
     
     fig, ax = plt.subplots(figsize=(16, 10))
-     
-    # Calcular estatísticas básicas
-    colunas_numeros = [col for col in df.columns if 'Numero' in col or col.isdigit()][:5]
-    colunas_estrelas = [col for col in df.columns if 'Estrela' in col or 'Star' in col][:2]
-     
-    if not colunas_numeros:
-        colunas_numeros = df.columns[:5]
-    if not colunas_estrelas:
-        colunas_estrelas = df.columns[5:7] if len(df.columns) >= 7 else df.columns[-2:]
-     
-    # Estatísticas dos números
-    numeros_stats = df[colunas_numeros].describe()
-    estrelas_stats = df[colunas_estrelas].describe()
-     
+    
+    # Calcular estatísticas básicas para cada coluna
+    stats_por_coluna = {}
+    for col in colunas_existentes:
+        # Converter para numérico se possível
+        serie = pd.to_numeric(df[col], errors='coerce').dropna()
+        if len(serie) > 0:
+            stats_por_coluna[col] = serie.describe()
+    
+    if not stats_por_coluna:
+        print("Não foi possível calcular estatísticas para nenhuma das colunas fornecidas.")
+        return None
+    
     # Preparar dados para o gráfico
     categorias = ['Média', 'Mediana', 'Desvio Padrão', 'Mínimo', 'Máximo']
-     
-    # Média dos números
-    media_numeros = numeros_stats.loc['mean'].mean()
-    # Mediana dos números
-    mediana_numeros = numeros_stats.loc['50%'].mean()
-    # Desvio padrão dos números
-    std_numeros = numeros_stats.loc['std'].mean()
-    # Mínimo dos números
-    min_numeros = numeros_stats.loc['min'].min()
-    # Máximo dos números
-    max_numeros = numeros_stats.loc['max'].max()
-     
-    # Média das estrelas
-    media_estrelas = estrelas_stats.loc['mean'].mean()
-    # Mediana das estrelas
-    mediana_estrelas = estrelas_stats.loc['50%'].mean()
-    # Desvio padrão das estrelas
-    std_estrelas = estrelas_stats.loc['std'].mean()
-    # Mínimo das estrelas
-    min_estrelas = estrelas_stats.loc['min'].min()
-    # Máximo das estrelas
-    max_estrelas = estrelas_stats.loc['max'].max()
-     
-    valores_numeros = [media_numeros, mediana_numeros, std_numeros, min_numeros, max_numeros]
-    valores_estrelas = [media_estrelas, mediana_estrelas, std_estrelas, min_estrelas, max_estrelas]
-     
+    
+    # Calcular estatísticas para cada coluna
+    dados_grafico = {}
+    for col, stats in stats_por_coluna.items():
+        dados_grafico[col] = [
+            stats.loc['mean'],      # Média
+            stats.loc['50%'],       # Mediana
+            stats.loc['std'],       # Desvio padrão
+            stats.loc['min'],       # Mínimo
+            stats.loc['max']        # Máximo
+        ]
+    
+    # Preparar posições das barras
     x = np.arange(len(categorias))
-    width = 0.35
-     
+    width = 0.8 / len(colunas_existentes)  # Largura das barras ajustada ao número de colunas
+    
     # Cores modernas
-    cor_numeros = '#3498db'
-    cor_estrelas = '#e74c3c'
-     
-    bars1 = ax.bar(x - width/2, valores_numeros, width, label='Números', 
-                   color=cor_numeros, alpha=0.8, edgecolor='#2980b9', linewidth=1.5)
-    bars2 = ax.bar(x + width/2, valores_estrelas, width, label='Estrelas', 
-                   color=cor_estrelas, alpha=0.8, edgecolor='#c0392b', linewidth=1.5)
-     
+    cores = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#34495e', '#e67e22']
+    
+    # Plot das barras para cada coluna
+    barras = []
+    for i, (col, valores) in enumerate(dados_grafico.items()):
+        cor = cores[i % len(cores)]
+        posicao = x - (len(colunas_existentes) - 1) * width / 2 + i * width
+        
+        bar = ax.bar(posicao, valores, width, label=col, 
+                    color=cor, alpha=0.8, edgecolor=cor, linewidth=1.5)
+        barras.append(bar)
+        
+        # Adicionar valores nas barras
+        for j, (barra, valor) in enumerate(zip(bar, valores)):
+            if pd.notna(valor):
+                ax.text(barra.get_x() + barra.get_width()/2., barra.get_height() + 0.01,
+                       f'{valor:.1f}', ha='center', va='bottom', 
+                       fontsize=10, fontweight='bold', color='#2c3e50',
+                       bbox=dict(boxstyle="round,pad=0.2", 
+                                facecolor='white', 
+                                edgecolor=cor, 
+                                alpha=0.8))
+    
     # Personalizar o gráfico
     ax.set_xlabel('Estatísticas', fontweight='bold', color='#34495e', fontsize=14)
     ax.set_ylabel('Valores', fontweight='bold', color='#34495e', fontsize=14)
@@ -721,7 +873,7 @@ def plot_estatisticas_resumo(df, titulo='Estatísticas Resumo: Números vs Estre
     
     # Legend com design melhorado
     legend = ax.legend(frameon=True, fancybox=True, shadow=True, 
-                      fontsize=12, title_fontsize=13)
+                      fontsize=12, title_fontsize=13, title="Colunas")
     legend.get_frame().set_facecolor('white')
     legend.get_frame().set_edgecolor('#bdc3c7')
     
@@ -734,85 +886,5 @@ def plot_estatisticas_resumo(df, titulo='Estatísticas Resumo: Números vs Estre
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_color('#bdc3c7')
     ax.spines['bottom'].set_color('#bdc3c7')
-     
-    # Adicionar valores nas barras com design melhorado
-    for bars, cor in [(bars1, cor_numeros), (bars2, cor_estrelas)]:
-        for bar in bars:
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height + 0.1,
-                   f'{height:.1f}', ha='center', va='bottom', 
-                   fontsize=11, fontweight='bold', color='#2c3e50',
-                   bbox=dict(boxstyle="round,pad=0.3", 
-                            facecolor='white', 
-                            edgecolor=cor, 
-                            alpha=0.8))
-     
+    
     plt.tight_layout()
-    
-
-# =============================================================================
-# FUNÇÃO PRINCIPAL PARA EXECUTAR TODOS OS GRÁFICOS
-# =============================================================================
-
-def executar_todos_graficos(df, salvar_graficos=False, pasta_destino='graficos'):
-    """Executa todos os gráficos disponíveis no dataset"""
-    # Configurar estilo
-    configurar_estilo()
-    
-    # Lista de todas as funções de gráfico
-    funcoes_graficos = [
-        plot_boxplot_numeros,
-        plot_violinplot_numeros,
-        plot_boxplot_estrelas,
-        plot_violinplot_estrelas,
-        plot_evolucao_numeros_tempo,
-        plot_evolucao_estrelas_tempo,
-        plot_evolucao_premio_tempo,
-        plot_frequencia_numeros,
-        plot_frequencia_estrelas,
-        plot_distribuicao_vencedores,
-        plot_distribuicao_soma_numeros,
-        plot_distribuicao_soma_estrelas,
-        plot_heatmap_correlacao,
-        plot_distribuicao_combinada,
-        plot_estatisticas_resumo
-    ]
-    
-    graficos_gerados = []
-    
-    for i, funcao in enumerate(funcoes_graficos):
-        try:
-            print(f"Gerando gráfico {i+1}/{len(funcoes_graficos)}: {funcao.__name__}")
-            fig = funcao(df)
-            
-            if fig is not None:
-                graficos_gerados.append((funcao.__name__, fig))
-                
-                if salvar_graficos:
-                    # Criar pasta se não existir
-                    os.makedirs(pasta_destino, exist_ok=True)
-                    nome_arquivo = f"{funcao.__name__}.png"
-                    caminho_completo = os.path.join(pasta_destino, nome_arquivo)
-                    fig.savefig(caminho_completo, dpi=300, bbox_inches='tight')
-                    print(f"  Gráfico salvo: {caminho_completo}")
-                
-                plt.show()
-                plt.close(fig)
-            else:
-                print(f"  Gráfico não pôde ser gerado: {funcao.__name__}")
-                
-        except Exception as e:
-            print(f"  Erro ao gerar gráfico {funcao.__name__}: {str(e)}")
-    
-    print(f"\nTotal de gráficos gerados com sucesso: {len(graficos_gerados)}")
-    return graficos_gerados
-
-# =============================================================================
-# EXEMPLO DE USO
-# =============================================================================
-
-if __name__ == "__main__":
-    # Exemplo de como usar as funções
-    print("Módulo de visualização do Euromilhões carregado!")
-    print("Use a função 'executar_todos_graficos(df)' para gerar todos os gráficos")
-    print("Ou use funções individuais como 'plot_boxplot_numeros(df)'")
