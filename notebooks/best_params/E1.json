@@ -1,0 +1,14 @@
+{
+    "in_chunk": 9,
+    "out_chunk": 3,
+    "d_model": 64,
+    "nhead": 4,
+    "enc_layers": 6,
+    "dec_layers": 5,
+    "ff_dim": 384,
+    "dropout": 0.11370173320348284,
+    "batch_size": 32,
+    "lr": 0.00020298058052421552,
+    "weight_decay": 3.752055855124284e-05,
+    "seed": 4320
+}

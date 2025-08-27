@@ -290,3 +290,11 @@ fabric.properties
 
 # Android studio 3.1+ serialized cache file
 .idea/caches/build_file_checksums.ser
+
+# weights
+notebooks/modelos_pytorch/
+notebooks/tb_logs/
+notebooks/temp/
+notebooks/lightning_logs/
+notebooks/modelos_pytorch/
+notebooks/optuna_studies/
